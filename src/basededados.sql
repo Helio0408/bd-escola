@@ -6,9 +6,9 @@
 -- Garante um estado limpo (APAGA TODOS OS DADOS)
 DROP TABLE IF EXISTS mensagem_destinatario, mensagem_remetente, curso_requisito_curso, disciplina_requisito_curso, regra_curso, material_didatico_disciplina, curso_infra, avaliacao_professor, matricula, responsavel_disciplina, composicao_curso, aviso, disciplina, curso, departamento, funcionario_administrativo, professor, aluno, usuario, mensagem, material_didatico, regra, infraestrutura, unidade CASCADE;
 
--- =====================================================================
+-- ======================
 -- Criação das tabelas
--- =====================================================================
+-- ======================
 
 CREATE TABLE unidade (
 	id_unidade BIGSERIAL PRIMARY KEY,
@@ -218,3 +218,70 @@ CREATE TABLE mensagem_destinatario (
 
 -- Importação dos dados fictícios
 \i dados_ficticios.sql
+
+-- ======================
+-- Criação das views
+-- ======================
+
+-- Facilita a consulta do histórico de qualquer estudante
+CREATE VIEW vw_historico_aluno AS
+SELECT
+    u.id_user,
+    a.id_aluno,
+    u.nome || ' ' || u.sobrenome AS nome_completo_aluno,
+    u.email,
+    d.codigo_disciplina,
+    d.nome_disciplina,
+    m.data_efetivacao,
+    m.status,
+    m.notas
+FROM
+    usuario u
+JOIN
+    aluno a ON u.id_user = a.id_user
+JOIN
+    matricula m ON a.id_aluno = m.id_aluno
+JOIN
+    disciplina d ON m.codigo_disciplina = d.codigo_disciplina;
+
+
+-- Mostra uma lista detalhada dos professores
+CREATE VIEW vw_corpo_docente_detalhado AS
+SELECT
+    dep.nome_departamento,
+    u.nome || ' ' || u.sobrenome AS nome_professor,
+    p.titulacao,
+    p.area_especializacao,
+    d.nome_disciplina AS disciplina_responsavel
+FROM
+    departamento dep
+JOIN
+    professor p ON dep.professor_responsavel = p.id_professor OR p.id_professor IN (
+        SELECT rd.id_professor FROM responsavel_disciplina rd
+        JOIN composicao_curso cc ON rd.codigo_disciplina = cc.codigo_disciplina
+        JOIN curso c ON cc.codigo_curso = c.codigo_curso WHERE c.departamento = dep.codigo_departamento
+    )
+JOIN
+    usuario u ON p.id_user = u.id_user
+LEFT JOIN
+    responsavel_disciplina rd ON p.id_professor = rd.id_professor
+LEFT JOIN
+    disciplina d ON rd.codigo_disciplina = d.codigo_disciplina;
+
+
+-- Mostra um sumário geral de uma disciplina
+CREATE VIEW vw_sumario_disciplina AS
+SELECT
+    d.codigo_disciplina,
+    d.nome_disciplina,
+    COUNT(m.id_aluno) AS total_matriculados,
+    COUNT(CASE WHEN m.status = 'Cursando' THEN 1 END) AS alunos_cursando,
+    COUNT(CASE WHEN m.status = 'Aprovado' THEN 1 END) AS total_aprovados,
+    COUNT(CASE WHEN m.status = 'Reprovado' THEN 1 END) AS total_reprovados,
+    ROUND(AVG(m.notas), 2) AS media_geral_notas
+FROM
+    disciplina d
+LEFT JOIN
+    matricula m ON d.codigo_disciplina = m.codigo_disciplina
+GROUP BY
+    d.codigo_disciplina, d.nome_disciplina;
